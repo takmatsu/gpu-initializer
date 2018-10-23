@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: gpu-initializer
+  labels:
+    app: gpu-initializer
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: gpu-initializer:default
+  labels:
+    app: gpu-initializer
+subjects:
+- kind: ServiceAccount
+  name: default
+  namespace: gpu-initializer
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin

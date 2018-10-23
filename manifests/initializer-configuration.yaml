@@ -1,0 +1,13 @@
+apiVersion: admissionregistration.k8s.io/v1alpha1
+kind: InitializerConfiguration
+metadata:
+  name: gpu
+initializers:
+  - name: gpu.initializer.kubernetes.io
+    rules:
+      - apiGroups:
+          - "*"
+        apiVersions:
+          - "v1"
+        resources:
+          - pods

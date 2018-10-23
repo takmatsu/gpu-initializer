@@ -1,0 +1,21 @@
+apiVersion: apps/v1beta1
+kind: Deployment
+metadata:
+  namespace: gpu-initializer
+  initializers:
+    pending: []
+  labels:
+    app: gpu-initializer
+  name: gpu-initializer
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: gpu-initializer
+      name: gpu-initializer
+    spec:
+      containers:
+        - name: gpu-initializer
+          image: takmatsu/gpu-initializer:0.0.1
+          imagePullPolicy: Always
