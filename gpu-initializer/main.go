@@ -8,6 +8,9 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+	"io/ioutil"
+
+	"github.com/ghodss/yaml"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -23,14 +26,22 @@ import (
 
 const (
 	defaultInitializerName = "gpu.initializer.kubernetes.io"
+	defaultConfigmap       = "gpu-initializer"
 )
 
 var (
 	initializerName   string
+	configmap         string
 )
+
+type config struct {
+	IgnoreNamespaces []string
+}
+
 
 func main() {
 	flag.StringVar(&initializerName, "initializer-name", defaultInitializerName, "The initializer name")
+	flag.StringVar(&configmap, "configmap", defaultConfigmap, "The gpu initializer configuration configmap")
 	flag.Parse()
 
 	log.Println("Starting the Kubernetes initializer...")
@@ -42,6 +53,23 @@ func main() {
 	}
 
 	clientset, err := kubernetes.NewForConfig(clusterConfig)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	bs, err := ioutil.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
+	if err != nil {
+		log.Fatal("getting namespace from pod service account data: %s", err)
+	}
+	namespace := string(bs)
+
+	// Load the Envoy Initializer configuration from a Kubernetes ConfigMap.
+	cm, err := clientset.CoreV1().ConfigMaps(namespace).Get(configmap, metav1.GetOptions{})
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	c, err := configmapToConfig(cm)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -68,7 +96,7 @@ func main() {
 	_, controller := cache.NewInformer(includeUninitializedWatchlist, &corev1.Pod{}, resyncPeriod,
 		cache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
-				err := initializePod(obj.(*corev1.Pod), clientset)
+				err := initializePod(obj.(*corev1.Pod), c, clientset)
 				if err != nil {
 					log.Println(err)
 				}
@@ -87,7 +115,7 @@ func main() {
 	close(stop)
 }
 
-func initializePod(pod *corev1.Pod, clientset *kubernetes.Clientset) error {
+func initializePod(pod *corev1.Pod, c *config, clientset *kubernetes.Clientset) error {
 	if pod.ObjectMeta.GetInitializers() != nil {
 		pendingInitializers := pod.ObjectMeta.GetInitializers().Pending
 
@@ -103,10 +131,18 @@ func initializePod(pod *corev1.Pod, clientset *kubernetes.Clientset) error {
 				initializedPod.ObjectMeta.Initializers.Pending = append(pendingInitializers[:0], pendingInitializers[1:]...)
 			}
 
+			// If the Pod is in ignoring namespace, do nothing
+			for _, v := range c.IgnoreNamespaces {
+				if v == initializedPod.ObjectMeta.Namespace {
+					log.Printf("Pod: %s is ignored", initializedPod.Name)
+					return applyNewPod(pod, initializedPod, clientset)
+				}
+			}
+
 			// Modify the Pod spec to include the env NVIDIA_VISIBLE_DEVICES.
 			// Then patch the original pod.
 			inject_env := corev1.EnvVar{Name:"NVIDIA_VISIBLE_DEVICES", Value:"none"}
-                        for i, v := range initializedPod.Spec.Containers {
+			for i, v := range initializedPod.Spec.Containers {
 				// Delete original NVIDIA_VISIBLE_DEVICES parameter.
 				newEnv := []corev1.EnvVar{}
 				for _, vv := range v.Env {
@@ -119,30 +155,41 @@ func initializePod(pod *corev1.Pod, clientset *kubernetes.Clientset) error {
 				if !ok || (ok && gpu_limits.IsZero()) {
 					initializedPod.Spec.Containers[i].Env = append(newEnv, inject_env)
 				}
-                        }
-
-			//Apply new pod
-			oldData, err := json.Marshal(pod)
-			if err != nil {
-				return err
 			}
-
-			newData, err := json.Marshal(initializedPod)
-			if err != nil {
-				return err
-			}
-
-			patchBytes, err := strategicpatch.CreateTwoWayMergePatch(oldData, newData, corev1.Pod{})
-			if err != nil {
-				return err
-			}
-
-			_, err = clientset.CoreV1().Pods(pod.Namespace).Patch(pod.Name, types.StrategicMergePatchType, patchBytes)
-			if err != nil {
-				return err
-			}
+			return applyNewPod(pod, initializedPod, clientset)
 		}
 	}
-
 	return nil
 }
+
+func configmapToConfig(configmap *corev1.ConfigMap) (*config, error) {
+	var c config
+	err := yaml.Unmarshal([]byte(configmap.Data["config"]), &c)
+	if err != nil {
+		return nil, err
+	}
+	return &c, nil
+}
+
+func applyNewPod(oldPod *corev1.Pod, newPod *corev1.Pod, clientset *kubernetes.Clientset) error {
+	oldData, err := json.Marshal(oldPod)
+	if err != nil {
+		return err
+	}
+
+	newData, err := json.Marshal(newPod)
+	if err != nil {
+		return err
+	}
+
+	patchBytes, err := strategicpatch.CreateTwoWayMergePatch(oldData, newData, corev1.Pod{})
+	if err != nil {
+		return err
+	}
+
+	_, err = clientset.CoreV1().Pods(oldPod.Namespace).Patch(oldPod.Name, types.StrategicMergePatchType, patchBytes)
+	if err != nil {
+		return err
+	}
+	return nil
+} 

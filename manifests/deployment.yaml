@@ -8,7 +8,7 @@ metadata:
     app: gpu-initializer
   name: gpu-initializer
 spec:
-  replicas: 1
+  replicas: 2
   template:
     metadata:
       labels:
@@ -17,5 +17,5 @@ spec:
     spec:
       containers:
         - name: gpu-initializer
-          image: takmatsu/gpu-initializer:0.0.1
+          image: takmatsu/gpu-initializer:0.0.2
           imagePullPolicy: Always

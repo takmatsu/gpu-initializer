@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  namespace: gpu-initializer
+  name: gpu-initializer
+data:
+  config: |
+    ignoreNamespaces:
+      - "kube-system"

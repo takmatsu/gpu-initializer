@@ -16,6 +16,7 @@ gcloud alpha container clusters create k0 \
 
 ```
 kubectl apply -f https://raw.githubusercontent.com/takmatsu/gpu-initializer/master/manifests/rolebindings.yaml
+kubectl apply -f https://raw.githubusercontent.com/takmatsu/gpu-initializer/master/manifests/configmaps.yaml
 kubectl apply -f https://raw.githubusercontent.com/takmatsu/gpu-initializer/master/manifests/deployment.yaml
 kubectl apply -f https://raw.githubusercontent.com/takmatsu/gpu-initializer/master/manifests/initializer-configuration.yaml
 ```
