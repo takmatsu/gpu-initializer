@@ -1,4 +1,4 @@
-# Envoy Initializer
+# GPU Initializer
 
 The GPU Initializer is a [Kubernetes initializer](https://kubernetes.io/docs/admin/extensible-admission-controllers/#what-are-initializers) that injects the env NVIDIA_VISIBLE_DEVICES into a pod based on policy.
 

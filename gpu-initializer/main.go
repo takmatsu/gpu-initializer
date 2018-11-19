@@ -63,7 +63,7 @@ func main() {
 	}
 	namespace := string(bs)
 
-	// Load the Envoy Initializer configuration from a Kubernetes ConfigMap.
+	// Load the GPU Initializer configuration from a Kubernetes ConfigMap.
 	cm, err := clientset.CoreV1().ConfigMaps(namespace).Get(configmap, metav1.GetOptions{})
 	if err != nil {
 		log.Fatal(err)
